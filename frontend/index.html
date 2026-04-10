@@ -6,36 +6,27 @@
     <title>AI Document Analyzer</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background-color: #f4f7f6; 
-            color: #333; 
-            max-width: 1000px; 
-            margin: 0 auto; 
-            padding: 30px; 
-        }
-        .header { text-align: center; margin-bottom: 40px; }
-        .upload-section { 
-            background: white; 
-            padding: 20px; 
-            border-radius: 10px; 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        button {
-            background-color: #007bff; color: white; border: none; 
-            padding: 10px 20px; font-size: 16px; border-radius: 5px; 
-            cursor: pointer; margin-top: 10px;
-        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; max-width: 1100px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .input-container { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
+        .input-box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); flex: 1; min-width: 300px; text-align: center; }
+        
+        /* Canvas Styling */
+        #drawCanvas { border: 2px dashed #ccc; border-radius: 8px; cursor: crosshair; background-color: white; touch-action: none; }
+        
+        button { background-color: #007bff; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; margin-top: 10px; margin-right: 5px; }
         button:hover { background-color: #0056b3; }
-        .dashboard { display: flex; gap: 20px; }
-        .panel { 
-            background: white; padding: 20px; border-radius: 10px; 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05); flex: 1; 
-        }
-        canvas { max-width: 100%; border: 1px dashed #ccc; border-radius: 5px; }
-        #statusText { color: #007bff; font-weight: bold; text-align: center; }
+        .btn-secondary { background-color: #6c757d; }
+        .btn-secondary:hover { background-color: #5a6268; }
+        
+        .dashboard { display: flex; gap: 20px; flex-wrap: wrap; }
+        .panel { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); flex: 1; min-width: 300px; }
+        canvas { max-width: 100%; }
+        #imageCanvas { border: 1px solid #eee; border-radius: 5px; }
+        #statusText { color: #007bff; font-weight: bold; text-align: center; width: 100%; margin-top: 10px;}
+        
+        /* New Raw Digits Box */
+        .raw-digits { background: #e9ecef; padding: 15px; border-radius: 5px; font-size: 18px; letter-spacing: 2px; word-wrap: break-word; min-height: 50px; font-weight: bold; color: #212529; }
     </style>
 </head>
 <body>
@@ -45,18 +36,27 @@
         <p>Powered by OpenCV & Deep Learning</p>
     </div>
     
-    <div class="upload-section">
-        <h3>1. Upload a Document</h3>
-        <input type="file" id="imageInput" accept="image/png, image/jpeg">
-        <br>
-        <button id="analyzeBtn">Analyze with AI</button>
-        <p id="statusText"></p>
+    <div class="input-container">
+        <div class="input-box">
+            <h3>Option 1: Upload Image</h3>
+            <input type="file" id="imageInput" accept="image/png, image/jpeg">
+            <br>
+            <button id="analyzeUploadBtn">Analyze Upload</button>
+        </div>
+
+        <div class="input-box">
+            <h3>Option 2: Draw Digits</h3>
+            <canvas id="drawCanvas" width="400" height="150"></canvas>
+            <br>
+            <button id="analyzeDrawBtn">Analyze Drawing</button>
+            <button id="clearDrawBtn" class="btn-secondary">Clear</button>
+        </div>
     </div>
+    <div id="statusText"></div>
 
     <div class="dashboard">
         <div class="panel">
             <h3>Vision Extraction</h3>
-            <p>The AI's bounding boxes will appear here.</p>
             <canvas id="imageCanvas"></canvas>
         </div>
 
@@ -64,108 +64,160 @@
             <h3>Frequency Analytics</h3>
             <p>Total Digits Found: <strong id="totalCount" style="font-size: 20px; color: #007bff;">0</strong></p>
             <canvas id="chartCanvas"></canvas>
+            
+            <h3 style="margin-top: 20px;">Extracted Digits:</h3>
+            <div id="rawDigitsBox" class="raw-digits">None</div>
         </div>
     </div>
 
     <script>
         const imageInput = document.getElementById('imageInput');
-        const canvas = document.getElementById('imageCanvas');
-        const ctx = canvas.getContext('2d');
+        const displayCanvas = document.getElementById('imageCanvas');
+        const displayCtx = displayCanvas.getContext('2d');
+        const drawCanvas = document.getElementById('drawCanvas');
+        const drawCtx = drawCanvas.getContext('2d');
         let chartInstance = null;
 
-        // 1. Draw the image to the screen as soon as the user uploads it
+        // --- DRAWING CANVAS LOGIC ---
+        let isDrawing = false;
+        
+        // Fill canvas with white background initially (Needed for OpenCV)
+        drawCtx.fillStyle = "white";
+        drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+        
+        drawCtx.lineWidth = 12; // Thick lines so the AI can see them when shrunk down
+        drawCtx.lineCap = "round";
+        drawCtx.strokeStyle = "black";
+
+        const startDrawing = (e) => { isDrawing = true; draw(e); };
+        const stopDrawing = () => { isDrawing = false; drawCtx.beginPath(); };
+        const draw = (e) => {
+            if (!isDrawing) return;
+            const rect = drawCanvas.getBoundingClientRect();
+            // Handle both mouse and basic touch
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            drawCtx.lineTo(clientX - rect.left, clientY - rect.top);
+            drawCtx.stroke();
+            drawCtx.beginPath();
+            drawCtx.moveTo(clientX - rect.left, clientY - rect.top);
+        };
+
+        drawCanvas.addEventListener('mousedown', startDrawing);
+        drawCanvas.addEventListener('mousemove', draw);
+        drawCanvas.addEventListener('mouseup', stopDrawing);
+        drawCanvas.addEventListener('mouseout', stopDrawing);
+        
+        // Clear Drawing
+        document.getElementById('clearDrawBtn').addEventListener('click', () => {
+            drawCtx.fillStyle = "white";
+            drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+        });
+
+
+        // --- PREVIEW UPLOADED IMAGE ---
         imageInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             const reader = new FileReader();
             reader.onload = (event) => {
                 const img = new Image();
                 img.onload = () => {
-                    // Make the canvas the exact same size as the image
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    ctx.drawImage(img, 0, 0);
+                    displayCanvas.width = img.width;
+                    displayCanvas.height = img.height;
+                    displayCtx.drawImage(img, 0, 0);
                 }
                 img.src = event.target.result;
             }
             if(file) reader.readAsDataURL(file);
         });
 
-        // 2. What happens when they click "Analyze"
-        document.getElementById('analyzeBtn').addEventListener('click', async () => {
-            if (!imageInput.files[0]) return alert("Please choose an image first!");
-            
-            document.getElementById('statusText').innerText = "AI is analyzing document... Please wait.";
-            
-            const formData = new FormData();
-            formData.append("file", imageInput.files[0]);
 
+        // --- CENTRAL API FUNCTION ---
+        async function analyzeImage(formData) {
+            document.getElementById('statusText').innerText = "AI is analyzing document... Please wait.";
+            document.getElementById('rawDigitsBox').innerText = "Processing...";
+            
             try {
-                // IMPORTANT: This is pointing to your LOCAL computer right now.
-                // We will change this to your Render URL later!
-                const response = await fetch("https://handwritten-digit-analyzer.onrender.com/predict", {
-                    method: "POST",
-                    body: formData
-                });
+                // !!! REPLACE WITH YOUR RENDER URL !!!
+                const RENDER_URL = "https://handwritten-digit-analyzer.onrender.com/predict"; 
                 
+                const response = await fetch(RENDER_URL, { method: "POST", body: formData });
                 const result = await response.json();
                 
                 if (result.status === "success") {
                     document.getElementById('statusText').innerText = "Analysis Complete!";
                     document.getElementById('totalCount').innerText = result.total_found;
 
-                    // Setup our frequency counter (array of 10 zeros for digits 0-9)
                     const frequencies = Array(10).fill(0); 
+                    let rawDigitsArray = []; // To hold the extracted numbers
                     
-                    // 3. Draw the boxes and count the numbers!
-                    result.data.forEach(item => {
-                        // Draw the red box around the number
-                        ctx.strokeStyle = "#ff0044";
-                        ctx.lineWidth = Math.max(2, canvas.width / 300); // Scale line width based on image size
-                        ctx.strokeRect(item.box.x, item.box.y, item.box.w, item.box.h);
-                        
-                        // Draw the predicted text above the box
-                        ctx.fillStyle = "#007bff";
-                        ctx.font = `bold ${Math.max(16, canvas.width / 25)}px Arial`;
-                        ctx.fillText(item.digit, item.box.x, item.box.y - 5);
+                    // Sort results left-to-right, top-to-bottom so they read naturally in the text box
+                    result.data.sort((a, b) => (a.box.y * 1000 + a.box.x) - (b.box.y * 1000 + b.box.x));
 
-                        // Add this digit to our chart data
+                    result.data.forEach(item => {
+                        // Draw Boxes
+                        displayCtx.strokeStyle = "#ff0044";
+                        displayCtx.lineWidth = Math.max(2, displayCanvas.width / 300);
+                        displayCtx.strokeRect(item.box.x, item.box.y, item.box.w, item.box.h);
+                        
+                        displayCtx.fillStyle = "#007bff";
+                        displayCtx.font = `bold ${Math.max(16, displayCanvas.width / 25)}px Arial`;
+                        displayCtx.fillText(item.digit, item.box.x, item.box.y - 5);
+
                         frequencies[item.digit]++;
+                        rawDigitsArray.push(item.digit); // Save the digit for the text box
                     });
 
-                    // Update the visual chart
+                    // Update Text Box
+                    document.getElementById('rawDigitsBox').innerText = rawDigitsArray.length > 0 ? rawDigitsArray.join(', ') : "No digits found.";
+
+                    // Update Chart
                     updateChart(frequencies);
                 }
-
             } catch (error) {
                 console.error("Error:", error);
                 document.getElementById('statusText').innerText = "Error! Is your backend server running?";
             }
+        }
+
+
+        // --- BUTTON CLICKS ---
+        // 1. Upload Button
+        document.getElementById('analyzeUploadBtn').addEventListener('click', () => {
+            if (!imageInput.files[0]) return alert("Please choose an image first!");
+            const formData = new FormData();
+            formData.append("file", imageInput.files[0]);
+            analyzeImage(formData);
         });
 
-        // 4. Function to draw the beautiful bar chart
+        // 2. Draw Button
+        document.getElementById('analyzeDrawBtn').addEventListener('click', () => {
+            // Copy drawn canvas to the display canvas so the AI can draw boxes on it
+            displayCanvas.width = drawCanvas.width;
+            displayCanvas.height = drawCanvas.height;
+            displayCtx.drawImage(drawCanvas, 0, 0);
+
+            // Convert canvas to a file and send it
+            drawCanvas.toBlob((blob) => {
+                const formData = new FormData();
+                formData.append("file", blob, "canvas_drawing.png");
+                analyzeImage(formData);
+            }, 'image/png');
+        });
+
+
+        // --- CHART LOGIC ---
         function updateChart(frequencies) {
             const chartCtx = document.getElementById('chartCanvas').getContext('2d');
-            
-            // Destroy the old chart if they upload a second picture
             if (chartInstance) chartInstance.destroy(); 
-            
             chartInstance = new Chart(chartCtx, {
                 type: 'bar',
                 data: {
                     labels: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
-                    datasets: [{
-                        label: 'Times Appeared',
-                        data: frequencies,
-                        backgroundColor: 'rgba(0, 123, 255, 0.6)',
-                        borderColor: 'rgba(0, 123, 255, 1)',
-                        borderWidth: 1,
-                        borderRadius: 5
-                    }]
+                    datasets: [{ label: 'Times Appeared', data: frequencies, backgroundColor: 'rgba(0, 123, 255, 0.6)' }]
                 },
-                options: { 
-                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
-                    animation: { duration: 1000 }
-                }
+                options: { scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
             });
         }
     </script>
