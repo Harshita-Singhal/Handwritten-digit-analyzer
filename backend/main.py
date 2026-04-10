@@ -46,7 +46,7 @@ async def predict(file: UploadFile = File(...)):
         x, y, w, h = cv2.boundingRect(c)
         
         # Crop the image to just the number, adding a 5px border
-        digit_img = thresh[max(0, y-5):y+h+5, max(0, x-5):x+w+5]
+        digit_img = thresh[max(0, y-15):y+h+15, max(0, x-15):x+w+15]
         
         if digit_img.size == 0:
             continue
