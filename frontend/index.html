@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Document Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #f4f7f6; 
+            color: #333; 
+            max-width: 1000px; 
+            margin: 0 auto; 
+            padding: 30px; 
+        }
+        .header { text-align: center; margin-bottom: 40px; }
+        .upload-section { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 10px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #007bff; color: white; border: none; 
+            padding: 10px 20px; font-size: 16px; border-radius: 5px; 
+            cursor: pointer; margin-top: 10px;
+        }
+        button:hover { background-color: #0056b3; }
+        .dashboard { display: flex; gap: 20px; }
+        .panel { 
+            background: white; padding: 20px; border-radius: 10px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); flex: 1; 
+        }
+        canvas { max-width: 100%; border: 1px dashed #ccc; border-radius: 5px; }
+        #statusText { color: #007bff; font-weight: bold; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Multi-Digit Document Analyzer</h1>
+        <p>Powered by OpenCV & Deep Learning</p>
+    </div>
+    
+    <div class="upload-section">
+        <h3>1. Upload a Document</h3>
+        <input type="file" id="imageInput" accept="image/png, image/jpeg">
+        <br>
+        <button id="analyzeBtn">Analyze with AI</button>
+        <p id="statusText"></p>
+    </div>
+
+    <div class="dashboard">
+        <div class="panel">
+            <h3>Vision Extraction</h3>
+            <p>The AI's bounding boxes will appear here.</p>
+            <canvas id="imageCanvas"></canvas>
+        </div>
+
+        <div class="panel">
+            <h3>Frequency Analytics</h3>
+            <p>Total Digits Found: <strong id="totalCount" style="font-size: 20px; color: #007bff;">0</strong></p>
+            <canvas id="chartCanvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const canvas = document.getElementById('imageCanvas');
+        const ctx = canvas.getContext('2d');
+        let chartInstance = null;
+
+        // 1. Draw the image to the screen as soon as the user uploads it
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    // Make the canvas the exact same size as the image
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                }
+                img.src = event.target.result;
+            }
+            if(file) reader.readAsDataURL(file);
+        });
+
+        // 2. What happens when they click "Analyze"
+        document.getElementById('analyzeBtn').addEventListener('click', async () => {
+            if (!imageInput.files[0]) return alert("Please choose an image first!");
+            
+            document.getElementById('statusText').innerText = "AI is analyzing document... Please wait.";
+            
+            const formData = new FormData();
+            formData.append("file", imageInput.files[0]);
+
+            try {
+                // IMPORTANT: This is pointing to your LOCAL computer right now.
+                // We will change this to your Render URL later!
+                const response = await fetch("http://localhost:8000/predict", {
+                    method: "POST",
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === "success") {
+                    document.getElementById('statusText').innerText = "Analysis Complete!";
+                    document.getElementById('totalCount').innerText = result.total_found;
+
+                    // Setup our frequency counter (array of 10 zeros for digits 0-9)
+                    const frequencies = Array(10).fill(0); 
+                    
+                    // 3. Draw the boxes and count the numbers!
+                    result.data.forEach(item => {
+                        // Draw the red box around the number
+                        ctx.strokeStyle = "#ff0044";
+                        ctx.lineWidth = Math.max(2, canvas.width / 300); // Scale line width based on image size
+                        ctx.strokeRect(item.box.x, item.box.y, item.box.w, item.box.h);
+                        
+                        // Draw the predicted text above the box
+                        ctx.fillStyle = "#007bff";
+                        ctx.font = `bold ${Math.max(16, canvas.width / 25)}px Arial`;
+                        ctx.fillText(item.digit, item.box.x, item.box.y - 5);
+
+                        // Add this digit to our chart data
+                        frequencies[item.digit]++;
+                    });
+
+                    // Update the visual chart
+                    updateChart(frequencies);
+                }
+
+            } catch (error) {
+                console.error("Error:", error);
+                document.getElementById('statusText').innerText = "Error! Is your backend server running?";
+            }
+        });
+
+        // 4. Function to draw the beautiful bar chart
+        function updateChart(frequencies) {
+            const chartCtx = document.getElementById('chartCanvas').getContext('2d');
+            
+            // Destroy the old chart if they upload a second picture
+            if (chartInstance) chartInstance.destroy(); 
+            
+            chartInstance = new Chart(chartCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
+                    datasets: [{
+                        label: 'Times Appeared',
+                        data: frequencies,
+                        backgroundColor: 'rgba(0, 123, 255, 0.6)',
+                        borderColor: 'rgba(0, 123, 255, 1)',
+                        borderWidth: 1,
+                        borderRadius: 5
+                    }]
+                },
+                options: { 
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+                    animation: { duration: 1000 }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
