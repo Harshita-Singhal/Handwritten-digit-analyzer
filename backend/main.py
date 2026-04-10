@@ -26,11 +26,18 @@ async def predict(file: UploadFile = File(...)):
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     
-    # 2. Use OpenCV to find the digits
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    # Make background black and ink white
-    thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+    # 2. Use OpenCV to find the digits using COLOR FILTERING
+ # Convert image to HSV (Hue, Saturation, Value) to easily isolate colors
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+ # Define the color range for "Black Ink" 
+ # (We ignore Hue and Saturation, and only look for very low Value/brightness)
+    lower_black = np.array([0, 0, 0])
+    upper_black = np.array([180, 255, 120]) # 120 is the cutoff for dark gray/black
+
+ # Create a mask. This turns ALL red, blue, and green pixels to white (invisible), 
+ # and keeps ONLY the black handwriting.
+    thresh = cv2.inRange(hsv, lower_black, upper_black)
     
     # Draw invisible boxes around anything that looks like a number
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
