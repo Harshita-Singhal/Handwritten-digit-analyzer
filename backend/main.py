@@ -37,15 +37,29 @@ async def predict(file: UploadFile = File(...)):
     
     results = []
     
+    # Get the total size of the uploaded image
+    img_height, img_width = thresh.shape
+    # Set a maximum area (ignore anything larger than 20% of the total image)
+    max_area = (img_height * img_width) * 0.2 
+    
     # 3. Process each box one by one
     for c in contours:
-        # Ignore tiny dots (like dust or stray pixels)
-        if cv2.contourArea(c) < 40:
-            continue
-            
+        area = cv2.contourArea(c)
         x, y, w, h = cv2.boundingRect(c)
         
-        # Crop the image to just the number, adding a 5px border
+        # FILTER 1: Ignore tiny dots (dust)
+        if area < 60:
+            continue
+            
+        # FILTER 2: Ignore massive boxes (like the application window borders)
+        if area > max_area:
+            continue
+            
+        # FILTER 3: Ignore thin lines (a real digit has some width and height)
+        if h < 15 or w < 5:
+            continue
+            
+        # Crop the image to just the number, adding a 15px border
         digit_img = thresh[max(0, y-15):y+h+15, max(0, x-15):x+w+15]
         
         if digit_img.size == 0:
