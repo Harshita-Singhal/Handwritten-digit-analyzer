@@ -15,6 +15,7 @@
         button:hover { background-color: #0056b3; }
         .btn-secondary { background-color: #6c757d; }
         .btn-secondary:hover { background-color: #5a6268; }
+        select { padding: 8px; border-radius: 5px; border: 1px solid #ccc; font-size: 14px; margin-top: 10px; width: 80%; }
         .dashboard { display: flex; gap: 20px; flex-wrap: wrap; }
         .panel { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); flex: 1; min-width: 300px; }
         canvas { max-width: 100%; }
@@ -34,6 +35,11 @@
         <div class="input-box">
             <h3>Option 1: Upload Image</h3>
             <input type="file" id="imageInput" accept="image/png, image/jpeg">
+            <br>
+            <select id="filterMode">
+                <option value="balanced">Document Mode (Clean Scans / Digital)</option>
+                <option value="advanced">Camera Mode (Shadows / Blurry Photos)</option>
+            </select>
             <br>
             <button id="analyzeUploadBtn">Analyze Upload</button>
         </div>
@@ -73,7 +79,6 @@
         drawCtx.fillStyle = "white";
         drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
         
-        // THINNER BRUSH FIX (6 instead of 12)
         drawCtx.lineWidth = 6; 
         drawCtx.lineCap = "round";
         drawCtx.strokeStyle = "black";
@@ -134,7 +139,6 @@
                     const frequencies = Array(10).fill(0); 
                     let rawDigitsArray = []; 
                     
-                    // SORTING FIX: Read numbers Left-to-Right, Top-to-Bottom
                     result.data.sort((a, b) => (a.box.y * 1000 + a.box.x) - (b.box.y * 1000 + b.box.x));
 
                     result.data.forEach(item => {
@@ -159,10 +163,16 @@
             }
         }
 
+        // --- UPDATED BUTTON CLICKS TO SEND DROPDOWN VALUE ---
         document.getElementById('analyzeUploadBtn').addEventListener('click', () => {
             if (!imageInput.files[0]) return alert("Please choose an image first!");
             const formData = new FormData();
             formData.append("file", imageInput.files[0]);
+            
+            // Get the value from the dropdown and send it to the backend
+            const mode = document.getElementById('filterMode').value;
+            formData.append("filter_mode", mode);
+            
             analyzeImage(formData);
         });
 
@@ -173,6 +183,10 @@
             drawCanvas.toBlob((blob) => {
                 const formData = new FormData();
                 formData.append("file", blob, "canvas_drawing.png");
+                
+                // For the drawing canvas, "balanced" mode always works best
+                formData.append("filter_mode", "balanced"); 
+                
                 analyzeImage(formData);
             }, 'image/png');
         });
