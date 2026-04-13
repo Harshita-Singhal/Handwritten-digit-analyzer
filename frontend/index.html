@@ -10,22 +10,16 @@
         .header { text-align: center; margin-bottom: 30px; }
         .input-container { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
         .input-box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); flex: 1; min-width: 300px; text-align: center; }
-        
-        /* Canvas Styling */
         #drawCanvas { border: 2px dashed #ccc; border-radius: 8px; cursor: crosshair; background-color: white; touch-action: none; }
-        
         button { background-color: #007bff; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; margin-top: 10px; margin-right: 5px; }
         button:hover { background-color: #0056b3; }
         .btn-secondary { background-color: #6c757d; }
         .btn-secondary:hover { background-color: #5a6268; }
-        
         .dashboard { display: flex; gap: 20px; flex-wrap: wrap; }
         .panel { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); flex: 1; min-width: 300px; }
         canvas { max-width: 100%; }
         #imageCanvas { border: 1px solid #eee; border-radius: 5px; }
         #statusText { color: #007bff; font-weight: bold; text-align: center; width: 100%; margin-top: 10px;}
-        
-        /* New Raw Digits Box */
         .raw-digits { background: #e9ecef; padding: 15px; border-radius: 5px; font-size: 18px; letter-spacing: 2px; word-wrap: break-word; min-height: 50px; font-weight: bold; color: #212529; }
     </style>
 </head>
@@ -43,7 +37,6 @@
             <br>
             <button id="analyzeUploadBtn">Analyze Upload</button>
         </div>
-
         <div class="input-box">
             <h3>Option 2: Draw Digits</h3>
             <canvas id="drawCanvas" width="400" height="150"></canvas>
@@ -59,12 +52,10 @@
             <h3>Vision Extraction</h3>
             <canvas id="imageCanvas"></canvas>
         </div>
-
         <div class="panel">
             <h3>Frequency Analytics</h3>
             <p>Total Digits Found: <strong id="totalCount" style="font-size: 20px; color: #007bff;">0</strong></p>
             <canvas id="chartCanvas"></canvas>
-            
             <h3 style="margin-top: 20px;">Extracted Digits:</h3>
             <div id="rawDigitsBox" class="raw-digits">None</div>
         </div>
@@ -78,14 +69,12 @@
         const drawCtx = drawCanvas.getContext('2d');
         let chartInstance = null;
 
-        // --- DRAWING CANVAS LOGIC ---
         let isDrawing = false;
-        
-        // Fill canvas with white background initially (Needed for OpenCV)
         drawCtx.fillStyle = "white";
         drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
         
-        drawCtx.lineWidth = 6; // Thick lines so the AI can see them when shrunk down
+        // THINNER BRUSH FIX (6 instead of 12)
+        drawCtx.lineWidth = 6; 
         drawCtx.lineCap = "round";
         drawCtx.strokeStyle = "black";
 
@@ -94,10 +83,8 @@
         const draw = (e) => {
             if (!isDrawing) return;
             const rect = drawCanvas.getBoundingClientRect();
-            // Handle both mouse and basic touch
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            
             drawCtx.lineTo(clientX - rect.left, clientY - rect.top);
             drawCtx.stroke();
             drawCtx.beginPath();
@@ -109,14 +96,11 @@
         drawCanvas.addEventListener('mouseup', stopDrawing);
         drawCanvas.addEventListener('mouseout', stopDrawing);
         
-        // Clear Drawing
         document.getElementById('clearDrawBtn').addEventListener('click', () => {
             drawCtx.fillStyle = "white";
             drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
         });
 
-
-        // --- PREVIEW UPLOADED IMAGE ---
         imageInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             const reader = new FileReader();
@@ -132,14 +116,12 @@
             if(file) reader.readAsDataURL(file);
         });
 
-
-        // --- CENTRAL API FUNCTION ---
         async function analyzeImage(formData) {
             document.getElementById('statusText').innerText = "AI is analyzing document... Please wait.";
             document.getElementById('rawDigitsBox').innerText = "Processing...";
             
             try {
-                // !!! REPLACE WITH YOUR RENDER URL !!!
+                // !!! PASTE YOUR RENDER URL RIGHT HERE !!!
                 const RENDER_URL = "https://handwritten-digit-analyzer.onrender.com/predict"; 
                 
                 const response = await fetch(RENDER_URL, { method: "POST", body: formData });
@@ -150,13 +132,12 @@
                     document.getElementById('totalCount').innerText = result.total_found;
 
                     const frequencies = Array(10).fill(0); 
-                    let rawDigitsArray = []; // To hold the extracted numbers
+                    let rawDigitsArray = []; 
                     
-                    // Sort results left-to-right, top-to-bottom so they read naturally in the text box
+                    // SORTING FIX: Read numbers Left-to-Right, Top-to-Bottom
                     result.data.sort((a, b) => (a.box.y * 1000 + a.box.x) - (b.box.y * 1000 + b.box.x));
 
                     result.data.forEach(item => {
-                        // Draw Boxes
                         displayCtx.strokeStyle = "#ff0044";
                         displayCtx.lineWidth = Math.max(2, displayCanvas.width / 300);
                         displayCtx.strokeRect(item.box.x, item.box.y, item.box.w, item.box.h);
@@ -166,13 +147,10 @@
                         displayCtx.fillText(item.digit, item.box.x, item.box.y - 5);
 
                         frequencies[item.digit]++;
-                        rawDigitsArray.push(item.digit); // Save the digit for the text box
+                        rawDigitsArray.push(item.digit);
                     });
 
-                    // Update Text Box
                     document.getElementById('rawDigitsBox').innerText = rawDigitsArray.length > 0 ? rawDigitsArray.join(', ') : "No digits found.";
-
-                    // Update Chart
                     updateChart(frequencies);
                 }
             } catch (error) {
@@ -181,9 +159,6 @@
             }
         }
 
-
-        // --- BUTTON CLICKS ---
-        // 1. Upload Button
         document.getElementById('analyzeUploadBtn').addEventListener('click', () => {
             if (!imageInput.files[0]) return alert("Please choose an image first!");
             const formData = new FormData();
@@ -191,14 +166,10 @@
             analyzeImage(formData);
         });
 
-        // 2. Draw Button
         document.getElementById('analyzeDrawBtn').addEventListener('click', () => {
-            // Copy drawn canvas to the display canvas so the AI can draw boxes on it
             displayCanvas.width = drawCanvas.width;
             displayCanvas.height = drawCanvas.height;
             displayCtx.drawImage(drawCanvas, 0, 0);
-
-            // Convert canvas to a file and send it
             drawCanvas.toBlob((blob) => {
                 const formData = new FormData();
                 formData.append("file", blob, "canvas_drawing.png");
@@ -206,8 +177,6 @@
             }, 'image/png');
         });
 
-
-        // --- CHART LOGIC ---
         function updateChart(frequencies) {
             const chartCtx = document.getElementById('chartCanvas').getContext('2d');
             if (chartInstance) chartInstance.destroy(); 
