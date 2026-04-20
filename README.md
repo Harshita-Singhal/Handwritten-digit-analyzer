@@ -9,7 +9,7 @@ A real-time, deep learning-powered web application for processing messy, distort
 [![TensorFlow](https://img.shields.io/badge/TensorFlow-2.0+-FF6F00.svg?style=for-the-badge&logo=tensorflow&logoColor=white)](https://www.tensorflow.org/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.0+-5C3EE8.svg?style=for-the-badge&logo=opencv&logoColor=white)](https://opencv.org/)
 
-🚀 [View Live Demo Here](https://your-github-username.github.io/your-repo-name) 🚀
+🚀 [View Live Demo Here](https://Harshita-Singhal.github.io/Handwritten-digit-analyzer) 🚀
 
 </div>
 
