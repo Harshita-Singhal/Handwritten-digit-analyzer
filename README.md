@@ -9,7 +9,7 @@ A real-time, deep learning-powered web application for processing messy, distort
 [![TensorFlow](https://img.shields.io/badge/TensorFlow-2.0+-FF6F00.svg?style=for-the-badge&logo=tensorflow&logoColor=white)](https://www.tensorflow.org/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.0+-5C3EE8.svg?style=for-the-badge&logo=opencv&logoColor=white)](https://opencv.org/)
 
-🚀 [View Live Demo Here](https://Harshita-Singhal.github.io/Handwritten-digit-analyzer) 🚀
+🚀 [View Live Demo Here](https://handwritten-digit-analyzer.vercel.app/) 🚀
 
 </div>
 
@@ -32,7 +32,6 @@ Current OCR systems and standard digit classifiers often struggle with complex, 
 | <img src="docs/preprocessing.png" alt="Preprocessing" width="400"/> | <img src="docs/dashboard.png" alt="Dashboard UI" width="400"/> |
 | HSV masking and precise topological cropping. | The responsive frontend dashboard. |
 
-(Note: Replace the image paths in the code above with the actual links to your uploaded screenshots)
 </div>
 
 ## ✨ Key Features
