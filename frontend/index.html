@@ -3,206 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Document Analyzer</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; max-width: 1100px; margin: 0 auto; padding: 20px; }
-        .header { text-align: center; margin-bottom: 30px; }
-        .input-container { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
-        .input-box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); flex: 1; min-width: 300px; text-align: center; }
-        #drawCanvas { border: 2px dashed #ccc; border-radius: 8px; cursor: crosshair; background-color: white; touch-action: none; }
-        button { background-color: #007bff; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; margin-top: 10px; margin-right: 5px; }
-        button:hover { background-color: #0056b3; }
-        .btn-secondary { background-color: #6c757d; }
-        .btn-secondary:hover { background-color: #5a6268; }
-        select { padding: 8px; border-radius: 5px; border: 1px solid #ccc; font-size: 14px; margin-top: 10px; width: 80%; }
-        .dashboard { display: flex; gap: 20px; flex-wrap: wrap; }
-        .panel { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); flex: 1; min-width: 300px; }
-        canvas { max-width: 100%; }
-        #imageCanvas { border: 1px solid #eee; border-radius: 5px; }
-        #statusText { color: #007bff; font-weight: bold; text-align: center; width: 100%; margin-top: 10px;}
-        .raw-digits { background: #e9ecef; padding: 15px; border-radius: 5px; font-size: 18px; letter-spacing: 2px; word-wrap: break-word; min-height: 50px; font-weight: bold; color: #212529; }
-    </style>
+    <title>Handwritten Digit Analyzer</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts for a modern look -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 </head>
 <body>
-
-    <div class="header">
-        <h1>Multi-Digit Document Analyzer</h1>
-        <p>Powered by OpenCV & Deep Learning</p>
-    </div>
+    <div class="background-glow"></div>
     
-    <div class="input-container">
-        <div class="input-box">
-            <h3>Option 1: Upload Image</h3>
-            <input type="file" id="imageInput" accept="image/png, image/jpeg">
-            <br>
-            <select id="filterMode">
-                <option value="balanced">Document Mode (Clean Scans / Digital)</option>
-                <option value="advanced">Camera Mode (Shadows / Blurry Photos)</option>
-            </select>
-            <br>
-            <button id="analyzeUploadBtn">Analyze Upload</button>
+    <main class="container">
+        <header>
+            <h1>Digit Analyzer <span>AI</span></h1>
+            <p>Draw a number from 0-9 below and let the neural network predict it.</p>
+        </header>
+
+        <div class="app-layout">
+            <!-- Canvas Section -->
+            <div class="canvas-panel">
+                <canvas id="drawingCanvas" width="280" height="280"></canvas>
+                <div class="controls">
+                    <button id="clearBtn" class="btn secondary">Clear Canvas</button>
+                    <button id="analyzeBtn" class="btn primary">Analyze Digit</button>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results-panel">
+                <h2>Prediction Result</h2>
+                <div id="predictionDisplay" class="prediction-box">
+                    <span class="placeholder">Awaiting input...</span>
+                </div>
+                <div class="confidence-bar-container">
+                    <p>Confidence: <span id="confidenceText">0%</span></p>
+                    <div class="confidence-track">
+                        <div id="confidenceFill" class="confidence-fill"></div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="input-box">
-            <h3>Option 2: Draw Digits</h3>
-            <canvas id="drawCanvas" width="400" height="150"></canvas>
-            <br>
-            <button id="analyzeDrawBtn">Analyze Drawing</button>
-            <button id="clearDrawBtn" class="btn-secondary">Clear</button>
-        </div>
-    </div>
-    <div id="statusText"></div>
+    </main>
 
-    <div class="dashboard">
-        <div class="panel">
-            <h3>Vision Extraction</h3>
-            <canvas id="imageCanvas"></canvas>
-        </div>
-        <div class="panel">
-            <h3>Frequency Analytics</h3>
-            <p>Total Digits Found: <strong id="totalCount" style="font-size: 20px; color: #007bff;">0</strong></p>
-            <canvas id="chartCanvas"></canvas>
-            <h3 style="margin-top: 20px;">Extracted Digits:</h3>
-            <div id="rawDigitsBox" class="raw-digits">None</div>
-        </div>
-    </div>
-
-    <script>
-        const imageInput = document.getElementById('imageInput');
-        const displayCanvas = document.getElementById('imageCanvas');
-        const displayCtx = displayCanvas.getContext('2d');
-        const drawCanvas = document.getElementById('drawCanvas');
-        const drawCtx = drawCanvas.getContext('2d');
-        let chartInstance = null;
-
-        let isDrawing = false;
-        drawCtx.fillStyle = "white";
-        drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
-        
-        drawCtx.lineWidth = 6; 
-        drawCtx.lineCap = "round";
-        drawCtx.strokeStyle = "black";
-
-        const startDrawing = (e) => { isDrawing = true; draw(e); };
-        const stopDrawing = () => { isDrawing = false; drawCtx.beginPath(); };
-        const draw = (e) => {
-            if (!isDrawing) return;
-            const rect = drawCanvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            drawCtx.lineTo(clientX - rect.left, clientY - rect.top);
-            drawCtx.stroke();
-            drawCtx.beginPath();
-            drawCtx.moveTo(clientX - rect.left, clientY - rect.top);
-        };
-
-        drawCanvas.addEventListener('mousedown', startDrawing);
-        drawCanvas.addEventListener('mousemove', draw);
-        drawCanvas.addEventListener('mouseup', stopDrawing);
-        drawCanvas.addEventListener('mouseout', stopDrawing);
-        
-        document.getElementById('clearDrawBtn').addEventListener('click', () => {
-            drawCtx.fillStyle = "white";
-            drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
-        });
-
-        imageInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const img = new Image();
-                img.onload = () => {
-                    displayCanvas.width = img.width;
-                    displayCanvas.height = img.height;
-                    displayCtx.drawImage(img, 0, 0);
-                }
-                img.src = event.target.result;
-            }
-            if(file) reader.readAsDataURL(file);
-        });
-
-        async function analyzeImage(formData) {
-            document.getElementById('statusText').innerText = "AI is analyzing document... Please wait.";
-            document.getElementById('rawDigitsBox').innerText = "Processing...";
-            
-            try {
-                // !!! PASTE YOUR RENDER URL RIGHT HERE !!!
-                const RENDER_URL = "https://handwritten-digit-analyzer.onrender.com/predict"; 
-                
-                const response = await fetch(RENDER_URL, { method: "POST", body: formData });
-                const result = await response.json();
-                
-                if (result.status === "success") {
-                    document.getElementById('statusText').innerText = "Analysis Complete!";
-                    document.getElementById('totalCount').innerText = result.total_found;
-
-                    const frequencies = Array(10).fill(0); 
-                    let rawDigitsArray = []; 
-                    
-                    result.data.sort((a, b) => (a.box.y * 1000 + a.box.x) - (b.box.y * 1000 + b.box.x));
-
-                    result.data.forEach(item => {
-                        displayCtx.strokeStyle = "#ff0044";
-                        displayCtx.lineWidth = Math.max(2, displayCanvas.width / 300);
-                        displayCtx.strokeRect(item.box.x, item.box.y, item.box.w, item.box.h);
-                        
-                        displayCtx.fillStyle = "#007bff";
-                        displayCtx.font = `bold ${Math.max(16, displayCanvas.width / 25)}px Arial`;
-                        displayCtx.fillText(item.digit, item.box.x, item.box.y - 5);
-
-                        frequencies[item.digit]++;
-                        rawDigitsArray.push(item.digit);
-                    });
-
-                    document.getElementById('rawDigitsBox').innerText = rawDigitsArray.length > 0 ? rawDigitsArray.join(', ') : "No digits found.";
-                    updateChart(frequencies);
-                }
-            } catch (error) {
-                console.error("Error:", error);
-                document.getElementById('statusText').innerText = "Error! Is your backend server running?";
-            }
-        }
-
-        // --- UPDATED BUTTON CLICKS TO SEND DROPDOWN VALUE ---
-        document.getElementById('analyzeUploadBtn').addEventListener('click', () => {
-            if (!imageInput.files[0]) return alert("Please choose an image first!");
-            const formData = new FormData();
-            formData.append("file", imageInput.files[0]);
-            
-            // Get the value from the dropdown and send it to the backend
-            const mode = document.getElementById('filterMode').value;
-            formData.append("filter_mode", mode);
-            
-            analyzeImage(formData);
-        });
-
-        document.getElementById('analyzeDrawBtn').addEventListener('click', () => {
-            displayCanvas.width = drawCanvas.width;
-            displayCanvas.height = drawCanvas.height;
-            displayCtx.drawImage(drawCanvas, 0, 0);
-            drawCanvas.toBlob((blob) => {
-                const formData = new FormData();
-                formData.append("file", blob, "canvas_drawing.png");
-                
-                // For the drawing canvas, "balanced" mode always works best
-                formData.append("filter_mode", "balanced"); 
-                
-                analyzeImage(formData);
-            }, 'image/png');
-        });
-
-        function updateChart(frequencies) {
-            const chartCtx = document.getElementById('chartCanvas').getContext('2d');
-            if (chartInstance) chartInstance.destroy(); 
-            chartInstance = new Chart(chartCtx, {
-                type: 'bar',
-                data: {
-                    labels: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
-                    datasets: [{ label: 'Times Appeared', data: frequencies, backgroundColor: 'rgba(0, 123, 255, 0.6)' }]
-                },
-                options: { scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-            });
-        }
-    </script>
+    <script src="app.js"></script>
 </body>
 </html>
