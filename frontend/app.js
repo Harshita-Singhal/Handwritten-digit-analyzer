@@ -46,8 +46,7 @@ analyzeBtn.addEventListener('click', async () => {
     const imageData = canvas.toDataURL('image/png');
 
     try {
-        // 👇 YAHAN APNA RENDER URL DAALEIN 👇
-        const response = await fetch('https://AAPKA-RENDER-APP-NAAM.onrender.com/predict', {
+        const response = await fetch('https://handwritten-digit-analyzer.onrender.com/predict', {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json' 
