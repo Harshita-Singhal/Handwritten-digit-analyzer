@@ -34,70 +34,87 @@ async def analyze_document(data: RequestData):
         base64_data = data.image.split(",")[1]
         img_bytes = base64.b64decode(base64_data)
         np_arr = np.frombuffer(img_bytes, np.uint8)
-        img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Load as grayscale directly
+        img = cv2.imdecode(np_arr, cv2.IMREAD_GRAYSCALE)
 
-        # 2. SMART THRESHOLDING (Bug fixed here)
+        # 2. THRESHOLDING
         if data.logic == "camera":
-            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            blurred = cv2.GaussianBlur(img, (5, 5), 0)
             thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
                                            cv2.THRESH_BINARY_INV, 11, 2)
         else:
-            # Simple Binary Inverse: White bg becomes black, Black ink becomes white.
-            _, thresh = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY_INV)
+            # Clean Scans: Simple Binary Inverse
+            _, thresh = cv2.threshold(img, 128, 255, cv2.THRESH_BINARY_INV)
             
-            # Thicken the drawn lines so the CNN model can see them clearly
+            # Dilate to connect broken lines/thin strokes
             kernel = np.ones((3,3), np.uint8)
             thresh = cv2.dilate(thresh, kernel, iterations=1)
 
         # 3. Find Outlines (Contours)
         contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # Agar canvas khali hai ya image detect nahi hui
-        if len(contours) == 0:
-            return {"error": "Could not detect any shapes. Please draw a thicker number."}
-
-        # Sort contours Left to Right
-        bounding_boxes = [cv2.boundingRect(c) for c in contours]
-        contours, bounding_boxes = zip(*sorted(zip(contours, bounding_boxes), key=lambda b: b[1][0]))
-
         extracted_digits = []
         confidences = []
         frequencies = [0] * 10 
 
-        valid_object_count = 0
-        
-        # 4. Extract and Predict
+        # 4. Process Contours
+        valid_contours = []
         for c in contours:
             (x, y, w, h) = cv2.boundingRect(c)
+            # Filter out tiny dust particles (must be at least 5x5 pixels)
+            if w >= 5 and h >= 5:
+                valid_contours.append((x, y, w, h))
 
-            # Filter out tiny dots (noise)
-            if w >= 10 and h >= 10:
-                valid_object_count += 1
-                
-                # Add padding around the digit so it isn't squeezed
-                y_start = max(0, y - 10)
-                y_end = min(thresh.shape[0], y + h + 10)
-                x_start = max(0, x - 10)
-                x_end = min(thresh.shape[1], x + w + 10)
+        # Sort contours Left to Right
+        valid_contours = sorted(valid_contours, key=lambda b: b[0])
 
-                roi = thresh[y_start:y_end, x_start:x_end]
-                classify_patch(roi, extracted_digits, confidences, frequencies)
+        for (x, y, w, h) in valid_contours:
+            # Crop exactly to the digit
+            roi = thresh[y:y+h, x:x+w]
 
-        # Fallback: Agar sari lines 10x10 se choti thi (bohot chota draw kiya)
-        if valid_object_count == 0:
-            largest_c = max(contours, key=cv2.contourArea)
-            (x, y, w, h) = cv2.boundingRect(largest_c)
-            roi = thresh[max(0, y-5):y+h+5, max(0, x-5):x+w+5]
-            classify_patch(roi, extracted_digits, confidences, frequencies)
+            # --- SMART PADDING (Fixes the crashing and accuracy issues) ---
+            # Make the image a perfect square without stretching it
+            side = max(w, h)
+            pad_x = (side - w) // 2
+            pad_y = (side - h) // 2
+            square_roi = cv2.copyMakeBorder(roi, pad_y, pad_y, pad_x, pad_x, cv2.BORDER_CONSTANT, value=0)
 
-        # Agar sab fail ho jaye
+            # Add a 20% border around the square (This matches how MNIST AI was trained!)
+            pad_amt = int(side * 0.2)
+            final_roi = cv2.copyMakeBorder(square_roi, pad_amt, pad_amt, pad_amt, pad_amt, cv2.BORDER_CONSTANT, value=0)
+
+            # Resize securely to 28x28
+            roi_resized = cv2.resize(final_roi, (28, 28), interpolation=cv2.INTER_AREA)
+            roi_final = roi_resized / 255.0
+            roi_final = roi_final.reshape(1, 28, 28, 1)
+
+            # Predict
+            pred = model.predict(roi_final)
+            digit = int(np.argmax(pred))
+            conf = float(np.max(pred) * 100)
+
+            extracted_digits.append(digit)
+            confidences.append(conf)
+            frequencies[digit] += 1
+
+        # 5. ULTIMATE FALLBACK (Your original logic!)
+        # If the contour extraction fails entirely, just run the whole canvas
         if len(extracted_digits) == 0:
-            return {"error": "Shape found, but the AI could not process it."}
+            roi_resized = cv2.resize(thresh, (28, 28), interpolation=cv2.INTER_AREA)
+            roi_final = roi_resized / 255.0
+            roi_final = roi_final.reshape(1, 28, 28, 1)
+
+            pred = model.predict(roi_final)
+            digit = int(np.argmax(pred))
+            conf = float(np.max(pred) * 100)
+
+            extracted_digits.append(digit)
+            confidences.append(conf)
+            frequencies[digit] += 1
 
         avg_confidence = sum(confidences) / len(confidences)
 
-        # 5. Send data back to Frontend
         return {
             "extracted_digits": extracted_digits,
             "frequencies": frequencies,
@@ -105,26 +122,5 @@ async def analyze_document(data: RequestData):
         }
 
     except Exception as e:
-        return {"error": str(e)}
-
-# Helper function for CNN prediction
-def classify_patch(roi, extracted_digits, confidences, frequencies):
-    try:
-        if roi.size == 0:
-            return
-
-        # Resize exactly to 28x28 (what MNIST model expects)
-        roi = cv2.resize(roi, (28, 28), interpolation=cv2.INTER_AREA)
-        roi = roi / 255.0
-        roi = roi.reshape(1, 28, 28, 1)
-
-        pred = model.predict(roi)
-        digit = int(np.argmax(pred))
-        conf = float(np.max(pred) * 100)
-
-        extracted_digits.append(digit)
-        confidences.append(conf)
-        frequencies[digit] += 1
-    except Exception as e:
-        print(f"Skipped patch due to error: {e}")
-        pass
+        # Instead of hiding the error, send the exact Python error to Vercel
+        return {"error": f"Actual Backend Crash: {str(e)}"}
