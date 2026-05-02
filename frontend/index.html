@@ -3,45 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Handwritten Digit Analyzer</title>
+    <title>Advanced Handwritten Digit Analyzer</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Google Fonts for a modern look -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- Chart.js for the Graph -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="background-glow"></div>
     
-    <main class="container">
-        <header>
-            <h1>Digit Analyzer <span>AI</span></h1>
-            <p>Draw a number from 0-9 below and let the neural network predict it.</p>
-        </header>
+    <div class="header-titles">
+        <h1>Digit Analyzer <span>Pro</span></h1>
+        <p>Advanced OCR with 3D visualization. Draw or upload a document.</p>
+    </div>
 
-        <div class="app-layout">
-            <!-- Canvas Section -->
-            <div class="canvas-panel">
-                <canvas id="drawingCanvas" width="280" height="280"></canvas>
-                <div class="controls">
-                    <button id="clearBtn" class="btn secondary">Clear Canvas</button>
-                    <button id="analyzeBtn" class="btn primary">Analyze Digit</button>
+    <!-- The 3D Scene -->
+    <div class="scene">
+        <div class="card" id="flipCard">
+            
+            <!-- FRONT OF CARD: INPUT -->
+            <div class="card-face card-front">
+                
+                <div class="input-tabs">
+                    <button class="tab-btn active" id="tabDraw">✏️ Draw Digit</button>
+                    <button class="tab-btn" id="tabUpload">📁 Upload Image</button>
                 </div>
-            </div>
 
-            <!-- Results Section -->
-            <div class="results-panel">
-                <h2>Prediction Result</h2>
-                <div id="predictionDisplay" class="prediction-box">
-                    <span class="placeholder">Awaiting input...</span>
-                </div>
-                <div class="confidence-bar-container">
-                    <p>Confidence: <span id="confidenceText">0%</span></p>
-                    <div class="confidence-track">
-                        <div id="confidenceFill" class="confidence-fill"></div>
+                <div class="input-area">
+                    <!-- Draw Area -->
+                    <div id="drawSection" class="input-section active">
+                        <canvas id="drawingCanvas" width="280" height="280"></canvas>
+                        <button id="clearBtn" class="btn secondary small-btn">Clear Canvas</button>
+                    </div>
+
+                    <!-- Upload Area -->
+                    <div id="uploadSection" class="input-section">
+                        <div class="upload-box">
+                            <input type="file" id="fileInput" accept="image/*" hidden>
+                            <label for="fileInput" class="upload-label">
+                                <span style="font-size: 2rem;">📤</span><br>
+                                Click to Upload or Drag & Drop<br>
+                                <span style="font-size: 0.8rem; color: var(--text-muted);">Supports PNG, JPG</span>
+                            </label>
+                            <img id="imagePreview" style="display: none; max-width: 100%; max-height: 200px; border-radius: 10px; margin-top: 10px;">
+                        </div>
                     </div>
                 </div>
+
+                <div class="logic-selector">
+                    <p>Select Processing Logic:</p>
+                    <div class="radio-group">
+                        <label><input type="radio" name="logic" value="clean" checked> Clean Scans</label>
+                        <label><input type="radio" name="logic" value="camera"> Camera Scans</label>
+                    </div>
+                </div>
+
+                <button id="analyzeBtn" class="btn primary full-width">🚀 Analyze Data</button>
             </div>
+
+            <!-- BACK OF CARD: OUTPUT -->
+            <div class="card-face card-back">
+                <h2>Analysis Results</h2>
+                
+                <div class="results-grid">
+                    <div class="digits-container">
+                        <h3>Extracted Digits</h3>
+                        <div id="extractedDigitsList" class="extracted-box">
+                            <!-- Digits will appear here -->
+                        </div>
+                    </div>
+                    
+                    <div class="graph-container">
+                        <h3>Digit Frequency</h3>
+                        <canvas id="resultsChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="confidence-box">
+                    <p>Overall Confidence: <span id="confidenceText" style="color: var(--accent);">0%</span></p>
+                </div>
+
+                <button id="flipBackBtn" class="btn secondary full-width">🔄 Test Another Image</button>
+            </div>
+
         </div>
-    </main>
+    </div>
 
     <script src="app.js"></script>
 </body>
